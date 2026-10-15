@@ -1,0 +1,107 @@
+<title>Válka růží</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+__CSS__
+</style>
+
+<div id="stage" class="stage">
+  <div class="candle"></div>
+
+  <header id="topbar">
+    <div class="brand"><span class="brand-rose" id="brand-rose"></span><span class="brand-title">Válka růží</span></div>
+    <div id="status">
+      <span class="st-item">Kolo <b id="round-num">1</b></span>
+      <span class="st-sep"></span>
+      <span class="st-item">Začíná <b id="starter-name">—</b></span>
+      <span class="st-sep"></span>
+      <span class="st-item" id="goal-label">Cíl: 4 pole</span>
+    </div>
+    <div id="ticker" class="ticker"></div>
+    <div class="tools">
+      <button class="tool" id="btn-chronicle" data-tip="Kronika událostí" aria-label="Kronika"></button>
+      <button class="tool" id="btn-rules" data-tip="Přehled schopností" aria-label="Pravidla"></button>
+      <button class="tool" id="btn-speed" data-tip="Tempo hry" aria-label="Tempo"></button>
+      <button class="tool" id="btn-sfx" data-tip="Zvukové efekty" aria-label="Zvuky"></button>
+      <button class="tool" id="btn-music" data-tip="Hudba" aria-label="Hudba"></button>
+    </div>
+  </header>
+
+  <main id="table">
+    <section id="board">
+      <div class="board-frame"></div>
+      <div id="tiles"></div>
+      <div id="board-hint"></div>
+    </section>
+
+    <section id="my-strip">
+      <div id="my-info" class="my-info"></div>
+      <div id="my-played" class="seat-played my-played"></div>
+      <div id="zones" class="zones">
+        <div class="zone zone-token" data-zone="token"><div class="zone-ico"></div><div class="zone-title">Se žetonem</div><div class="zone-sub"></div></div>
+        <div class="zone zone-bank" data-zone="bank"><div class="zone-ico"></div><div class="zone-title">Uschovat do truhly</div><div class="zone-sub"></div></div>
+        <div class="zone zone-hero" data-zone="hero"><div class="zone-ico"></div><div class="zone-title">Vyložit hrdinu</div><div class="zone-sub"></div></div>
+      </div>
+    </section>
+
+    <section id="seat-left" class="seat-slot slot-left"></section>
+    <section id="seat-top" class="seat-slot slot-top"></section>
+    <section id="seat-right" class="seat-slot slot-right"></section>
+  </main>
+
+  <footer id="hand-area">
+    <div class="dock dock-left">
+      <div id="my-heroes" class="dock-heroes"></div>
+      <button id="my-pool" class="pool-btn" data-tip="Tvé panství"></button>
+    </div>
+    <div id="hand"></div>
+    <div class="dock dock-right">
+      <div id="my-tokens" class="my-tokens" data-tip="Žetony přízně"></div>
+      <div class="piles">
+        <div class="pile" id="my-draw" data-tip="Dobírací balíček"></div>
+        <div class="pile" id="my-discard" data-tip="Odhozené karty"></div>
+      </div>
+      <button id="btn-pass" class="seal-btn" disabled><span class="seal-text">Pass</span></button>
+    </div>
+  </footer>
+
+  <div id="prompt" class="prompt hidden"></div>
+  <div id="toasts"></div>
+  <div id="banner-layer"></div>
+  <div id="fx-layer"></div>
+  <div id="drag-layer"></div>
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <aside id="chronicle" class="drawer hidden">
+    <div class="drawer-head"><span>Kronika</span><button class="x" id="chronicle-close" aria-label="Zavřít">×</button></div>
+    <div id="log-list"></div>
+  </aside>
+
+  <div id="rules" class="overlay hidden"><div class="sheet sheet-wide"><button class="x" data-close aria-label="Zavřít">×</button><div id="rules-body"></div></div></div>
+  <div id="pool" class="overlay hidden"><div class="sheet"><button class="x" data-close aria-label="Zavřít">×</button><div id="pool-body"></div></div></div>
+  <div id="dialog" class="overlay hidden"><div class="sheet sheet-dialog"><div id="dialog-body"></div></div></div>
+  <div id="setup" class="overlay overlay-solid hidden"><div class="sheet sheet-setup" id="setup-body"></div></div>
+  <div id="gameover" class="overlay overlay-solid hidden"><div class="sheet sheet-wide" id="gameover-body"></div></div>
+  <div id="tutorial" class="overlay overlay-solid hidden"></div>
+  <div id="rotate-hint"><div>Otoč zařízení na šířku,<br>stůl se tam vejde.</div></div>
+</div>
+
+<script>
+__GAME_JS__
+</script>
+<script>
+__ART_JS__
+</script>
+<script>
+__AUDIO_JS__
+</script>
+<script>
+__TUTORIAL_JS__
+</script>
+<script>
+__UI_JS__
+</script>
+<script>
+  boot();
+</script>
