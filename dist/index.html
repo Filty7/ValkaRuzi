@@ -805,7 +805,7 @@ const COLOR_NAME = { R: 'Červená', G: 'Zelená', Y: 'Žlutá', B: 'Modrá', S:
 const COLOR_ABILITY_NAME = { R: 'Vražda', G: 'Špionáž', Y: 'Úplatky', B: 'Podpora církve', S: 'Svatba' };
 const COLOR_ABILITY_DESC = {
   R: 'Vyber soupeře a znič jednu jeho vyloženou (lícem nahoru) kartu.',
-  G: 'Vyber soupeře: musí hned uschovat do truhly náhodnou kartu ze své ruky (vezmeš mu ji vslepo a položíš lícem dolů). Karta se mu sečte jako karta v truhle a na konci kola půjde do jeho panství.',
+  G: 'Vyber soupeře: musí hned uschovat do truhly kartu ze své ruky (sám si vybere, kterou). Počítá se mu jako 1 a na konci kola jde do jeho panství.',
   Y: 'Vyber soupeřovu kartu v truhle, odhal ji a otoč na mínus - karta se navždy zamkne se zápornou hodnotou.',
   B: 'Lízni si vrchní kartu z neutrálního balíčku a přidej si její hodnotu do součtu kola.',
   S: 'Vyber soupeře a prohoďte si po jedné vyložené kartě (svatba).',
@@ -1198,23 +1198,24 @@ async function triggerAbility(game, color, actingPlayer, fromFavorToken) {
   }
 
   else if (color === 'G') {
-    // Špionáž (přepracováno popáté - nucené uschovávání do truhly): vyber soupeře, který musí hned uschovat do truhly
-    // NÁHODNOU kartu z ruky (vezmeš mu ji vslepo). Karta jde lícem dolů na jeho stůl jako běžná
-    // karta v truhle (hodnota 1 do součtu, na konci kola do panství). Když mu padne barva,
-    // kterou sbírá, pomůžeš mu; když jinou, o kartu přijde zbytečně. Nefunguje při zákazu uschovávání do truhly
-    // (Henry VI.) a na soupeře bez karet na ruce.
+    // Špionáž (šestá verze): vyber soupeře, který musí hned uschovat do truhly jednu kartu ze své ruky.
+    // Kartu si vybírá SÁM (člověk klikem, bot podle situace) - zaplatí kartou z ruky (zdroj), dostane
+    // za to bod do panství. Nefunguje při zákazu uschovávání (Henry VI.) a na soupeře bez karet na ruce.
     if (game.heroFlags && game.heroFlags.noBanking) { uiLog('Špionáž propadá - uschovávání do truhly je dočasně zakázané (Henry VI.).', 'muted'); return; }
     const candidates = otherActivePlayers(game, actingPlayer).filter(p => p.hand.length > 0);
     if (candidates.length === 0) { uiLog('Špionáž nemá koho přinutit - žádný soupeř nemá karty na ruce, schopnost propadá.', 'muted'); return; }
-    const targetId = await chooseOpponent(game, actingPlayer, candidates, 'Špionáž: vyber soupeře, který musí uschovat do truhly náhodnou kartu z ruky.', botSpyTargetScore);
+    const targetId = await chooseOpponent(game, actingPlayer, candidates, 'Špionáž: vyber soupeře, který musí uschovat do truhly kartu z ruky.', botSpyTargetScore);
     const target = game.players.find(p => p.id === targetId);
-    const idx = Math.floor(Math.random() * target.hand.length);
+    let cardId;
+    if (target.isHuman) cardId = await uiHumanChooseHandCard(game, target, `${actingPlayer.name} tě špehuje: vyber kartu z ruky, kterou musíš uschovat do truhly.`);
+    else cardId = botChooseForcedBankCard(game, target);
+    const idx = Math.max(0, target.hand.findIndex(c => c.id === cardId));
     const [card] = target.hand.splice(idx, 1);
     const forcedZero = !!(game.heroFlags && game.heroFlags.forceBankedZero); // Edward IV.
     const ph = forcedZero ? 0 : 1;
     const entry = { id: uid('play'), color: 'N', realColor: card.color, realValue: card.value, value: ph, originalValue: ph, active: true, facedown: true };
     target.playedThisRound.push(entry);
-    uiLog(`${actingPlayer.name} špehuje: ${target.name} musí uschovat do truhly náhodnou kartu z ruky.`, 'ability-G');
+    uiLog(`${actingPlayer.name} špehuje: ${target.name} musí uschovat do truhly kartu z ruky.`, 'ability-G');
     await flashEntries(game, [entry], 'play');
   }
 
@@ -1263,14 +1264,14 @@ async function triggerAbility(game, color, actingPlayer, fromFavorToken) {
 // soupeři vidí jen POČET nepoužitých hrdinů, ne jejich identitu.
 
 const HERO_LIST = [
-  { id: 'york', name: 'Richard z Yorku', desc: 'Zničí všechny vyložené karty s hodnotou 4-6 (u všech hráčů) a do konce kola zakáže hrát karty s touto hodnotou lícem nahoru (uschovávat do truhly je lze normálně dál).' },
-  { id: 'edmund', name: 'Edmund Beaufort', desc: 'Zničí všechny vyložené karty s hodnotou 2-4 (u všech hráčů) a do konce kola zakáže hrát karty s touto hodnotou lícem nahoru (uschovávat do truhly je lze normálně dál).' },
-  { id: 'edwardIV', name: 'Edward IV.', desc: 'Všechny vyložené karty (u všech hráčů), včetně nově zahraných, mají do konce kola hodnotu 1. Všechny karty v truhle (staré i nově uschované) mají do konce kola hodnotu 0.' },
-  { id: 'henryVI', name: 'Henry VI.', desc: 'Zničí všechny bezbarvé karty na stole (ať zahrané z ruky, nebo z podpory církve) i všechny karty v truhle (u všech hráčů) - zamčené žluté úplatky přežijí. Do konce kola nelze hrát bezbarvé karty z ruky ani uschovávat do truhly.' },
-  { id: 'cecily', name: 'Cecily Nevillová', desc: 'Každý hráč (včetně tebe) má už jen jeden další tah, poté musí passnout.' },
-  { id: 'margaretAnjou', name: 'Margaret z Anjou', desc: 'Každý hráč (včetně tebe) zničí své dvě nejvyšší vyložené karty. Při shodě hodnot volí majitel, kterou zničí.' },
-  { id: 'neville', name: 'Richard Neville — Kingmaker', desc: 'Toto kolo vyhrává hráč s nejnižším součtem místo nejvyšším.' },
-  { id: 'margaretBeaufort', name: 'Margaret Beaufort — Příměří', desc: 'Do konce kola nelze spustit žádnou schopnost karet (ani zdarma podle pole, ani přes žeton přízně) a nelze vracet kartu na ruku podle pravidla karty s hodnotou 1. Do truhly lze uschovávat normálně dál.' },
+  { id: 'york', name: 'Richard z Yorku', desc: 'Zničí všechny vyložené karty s hodnotou 4–6 (všem). Do konce kola je nejde hrát lícem nahoru.' },
+  { id: 'edmund', name: 'Edmund Beaufort', desc: 'Zničí všechny vyložené karty s hodnotou 2–4 (všem). Do konce kola je nejde hrát lícem nahoru.' },
+  { id: 'edwardIV', name: 'Edward IV.', desc: 'Všechny vyložené karty mají do konce kola hodnotu 1, karty v truhle 0.' },
+  { id: 'henryVI', name: 'Henry VI.', desc: 'Zničí všechny bezbarvé karty na stole i všechny karty v truhle. Do konce kola nejde hrát bezbarvé ani uschovávat do truhly.' },
+  { id: 'cecily', name: 'Cecily Nevillová', desc: 'Každý (i ty) má už jen jeden tah, pak musí passnout.' },
+  { id: 'margaretAnjou', name: 'Margaret z Anjou', desc: 'Každý (i ty) zničí své dvě nejvyšší vyložené karty.' },
+  { id: 'neville', name: 'Richard Neville — Kingmaker', desc: 'Toto kolo vyhrává nejnižší součet místo nejvyššího.' },
+  { id: 'margaretBeaufort', name: 'Margaret Beaufort — Příměří', desc: 'Do konce kola nefungují schopnosti karet (ani přes žeton) a karta 1 nic nevrací.' },
 ];
 function heroDef(id) { return HERO_LIST.find(h => h.id === id); }
 
@@ -1688,12 +1689,98 @@ function enumerateLegalActions(game, player) {
   return actions;
 }
 
+// ---- chytré používání hrdinů ("zlomové" hrdiny hraje jen tam, kde opravdu obrátí kolo) ----
+const FLIP_HEROES = new Set(['york', 'edmund', 'edwardIV', 'henryVI', 'margaretAnjou', 'neville']);
+
+// Součty kola po zahrání hrdiny (jen u "zlomových"); Map playerId -> součet.
+function projectHeroSums(game, heroId) {
+  const live = game.players.filter(p => !p.eliminated);
+  const sums = new Map();
+  for (const p of live) {
+    let s = roundSum(p);
+    const act = p.playedThisRound.filter(e => e.active && !isProtected(e));
+    if (heroId === 'york' || heroId === 'edmund') {
+      const [lo, hi] = heroId === 'york' ? [4, 6] : [2, 4];
+      for (const e of act) if (!e.facedown && e.value >= lo && e.value <= hi) s -= e.value;
+    } else if (heroId === 'edwardIV') {
+      for (const e of act) s -= e.value - (e.facedown ? 0 : 1);
+    } else if (heroId === 'henryVI') {
+      for (const e of act) if (e.color === 'N') s -= e.value;
+    } else if (heroId === 'margaretAnjou') {
+      const top = act.map(e => e.value).sort((x, y) => y - x).slice(0, 2);
+      for (const v of top) s -= v;
+    }
+    sums.set(p.id, s);
+  }
+  return sums;
+}
+
+// Vítěz kola podle zadaných součtů (včetně Nevilla a rozhodování remíz podle pořadí od začínajícího).
+function winnerBySums(game, sums, inverted) {
+  const n = game.players.length;
+  const dist = (seat) => (seat - game.startingPlayerIdx + n) % n;
+  const live = game.players.filter(p => !p.eliminated);
+  return live.slice().sort((a, b) => {
+    const cmp = inverted ? (sums.get(a.id) - sums.get(b.id)) : (sums.get(b.id) - sums.get(a.id));
+    return cmp !== 0 ? cmp : dist(a.seat) - dist(b.seat);
+  })[0];
+}
+
+function smartHeroFlip(game, player, heroes, forced) {
+  if (heroes.length === 0) return null;
+  const SP = (typeof SMART_P !== 'undefined') ? SMART_P : {};
+  const others = otherActivePlayers(game, player);
+  const nowSums = new Map(game.players.filter(p => !p.eliminated).map(p => [p.id, roundSum(p)]));
+  const winNow = winnerBySums(game, nowSums, !!(game.heroFlags && game.heroFlags.invertedWinner));
+  const activeOthers = others.filter(o => !o.passedThisRound).length;
+  const tile = player.currentTileId ? findTile(game, player.currentTileId) : null;
+  // hodnota výhry kola pro mě = body, které mi pole přidá + body, které nevezme soupeř, který by jinak vyhrál
+  let myGain = tile ? (1 + player.bankedPool[tile.color]) : 0;
+  const stakes = sf('stakes') ? null : null;
+  const need = game.winTiles || 4;
+  let best = null, bestScore = -Infinity;
+  for (const h of heroes) {
+    const inverted = h.id === 'neville' || !!(game.heroFlags && game.heroFlags.invertedWinner);
+    const sums = h.id === 'neville' ? nowSums : projectHeroSums(game, h.id);
+    const winAfter = winnerBySums(game, sums, inverted);
+    if (winAfter.id !== player.id) continue;            // hrdina mě do vedení nedostane
+    if (winNow.id === player.id && h.id !== 'neville') continue; // už vedu, hrdina by jen plýtval
+    if (winNow.id === player.id && h.id === 'neville') continue;
+    // robustnost: soupeři, kteří ještě hrají, můžou po hrdinovi znovu předběhnout
+    const mine = sums.get(player.id);
+    const rival = others.map(o => sums.get(o.id));
+    const margin = inverted ? (Math.min(...rival) - mine) : (mine - Math.max(...rival));
+    const bansRange = (h.id === 'york' || h.id === 'edmund');
+    const robust = activeOthers === 0 || h.id === 'neville' || margin >= (SP.heroMargin != null ? SP.heroMargin : 4) || (bansRange && margin >= 2);
+    if (!robust) continue;
+    // hodnota: moje body za pole + zabrání soupeři (ten, kdo vede teď, by získal své pole)
+    let V = myGain;
+    const lt = winNow.currentTileId ? findTile(game, winNow.currentTileId) : null;
+    if (lt) V += (1 + winNow.bankedPool[lt.color]) * (SP.heroDeny != null ? SP.heroDeny : 1);
+    // konec hry: kdo by získáním pole vyhrál
+    if (tilesTotal(player) + 1 >= need) V += 3;
+    if (tilesTotal(winNow) + 1 >= need) V += 3;
+    // čím víc zbývá nepoužitých hrdinů, tím víc se vyplatí počkat na lepší příležitost
+    const left = (player.heroes || []).filter(x => !x.used).length;
+    const thr = (forced ? 0.5 : 1) * ((SP.heroT != null ? SP.heroT : 3) - (left <= 1 ? 0.8 : 0) - Math.min(1.5, game.round * 0.12));
+    const sc = V - thr;
+    if (sc >= 0 && sc > bestScore) { bestScore = sc; best = h.id; }
+  }
+  return best ? { type: 'hero', heroId: best } : null;
+}
+
 function botConsiderHero(game, player, forced) {
-  const unused = (player.heroes || []).filter(h => !h.used);
+  let unused = (player.heroes || []).filter(h => !h.used);
   if (unused.length === 0) return null;
   // V 1. kole boti hrdiny nezahrávají vůbec, ani když jim došly karty na ruce (radši passnou) -
   // nejistota, kdo co drží, má vydržet přinejmenším přes celé první kolo.
   if (game.round <= 1) return null;
+  if (player.smart && sf('hero2')) {
+    const flip = smartHeroFlip(game, player, unused.filter(h => FLIP_HEROES.has(h.id)), forced);
+    if (flip) return flip;
+    unused = unused.filter(h => !FLIP_HEROES.has(h.id));
+    if (unused.length === 0) return null;
+  }
   const G = player.genome;
   const activePlayers = game.players.filter(p => !p.eliminated).length;
   const maturity = totalActiveEntries(game) / Math.max(1, activePlayers);
@@ -2004,8 +2091,8 @@ function estimateAbilityValue(game, player, color) {
     if (game.heroFlags && game.heroFlags.noBanking) return 0;
     const cands = others.filter(p => p.hand.length > 0);
     if (cands.length === 0) return 0;
-    const bestWaste = Math.max(...cands.map(spyWasteFraction));
-    return Math.min(5, 0.8 + bestWaste * 3 + (mySum <= leaderSum + 2 ? G.greenGapBonus : 0));
+    const smallest = Math.min(...cands.map(p => p.hand.length));
+    return Math.min(5, 0.6 + Math.max(0, 6 - smallest) * 0.3 + (mySum <= leaderSum + 2 ? G.greenGapBonus : 0));
   }
   if (color === 'S') {
     let bestTargetValue = 0;
@@ -2060,15 +2147,27 @@ function botPickGreyTakeEntry(actingPlayer, target) {
     () => theirs.map(e => e.id));
 }
 
-// Kolik z karet na ruce soupeře by mu nucené uschovávání do truhly "zmařilo": bezbarvé a barvy, do kterých
-// zatím neinvestuje (nemá pole té barvy) - ty uschováním nic nezískají.
-function spyWasteFraction(p) {
-  if (p.hand.length === 0) return 0;
-  const waste = p.hand.filter(c => c.color === 'N' || p.tilesPool[c.color] === 0).length;
-  return waste / p.hand.length;
+// Kterou kartu si bot vybere k povinnému uschování do truhly (Špionáž): nejraději tu, o kterou
+// přijde nejméně (nízká hodnota, barva, kterou nesbírá, bezbarvou), a pokud možno takovou, která mu
+// naopak přidá body (barva, kterou už vlastní jako pole). Vždy podle toho, co zrovna potřebuje.
+function botChooseForcedBankCard(game, p) {
+  const tile = findTile(game, p.currentTileId);
+  const cur = tile ? tile.color : null;
+  let best = null, bestScore = -Infinity;
+  for (const c of p.hand) {
+    const owned = c.color !== 'N' ? p.tilesPool[c.color] : 0;
+    const gain = owned * 3;                                   // karta v truhle násobí všechna pole té barvy
+    let use = c.value * 1.0;                                  // co mi karta dává na ruce
+    if (c.color !== 'N' && c.color === cur) use += 2.5;       // zahrání barvy pole = schopnost zdarma
+    if (c.color !== 'N' && owned === 0 && c.color !== cur) use -= 1; // barva bez investice - na ruce skoro zbytečná
+    const sc = gain - use + (Math.random() * 0.01);
+    if (sc > bestScore) { bestScore = sc; best = c; }
+  }
+  return best.id;
 }
+// Koho má smysl špehovat: hráče s malou zásobou karet (přijde o víc) a toho, kdo vede v polích.
 function botSpyTargetScore(p) {
-  return spyWasteFraction(p) * 10 + tilesTotal(p) * 0.5 + Math.min(p.hand.length, 6) * 0.1;
+  return Math.max(0, 8 - p.hand.length) + tilesTotal(p) * 0.6;
 }
 
 function botChooseYellowTarget(game, player, candidates) {
@@ -2093,6 +2192,8 @@ function botDecideActionByGenome(game, player, isFirstRound) {
   }
   const heroAction = botConsiderHero(game, player, false);
   if (heroAction) return heroAction;
+  // Neville (kolo vyhrává nejnižší součet): každá další karta mi jen zvedá součet - chytrý bot passne.
+  if (player.smart && sf('hero2') && game.heroFlags && game.heroFlags.invertedWinner) return { type: 'pass' };
   const tile = findTile(game, player.currentTileId);
   const currentColor = tile ? tile.color : null;
   const mySum = roundSum(player);
@@ -2322,12 +2423,12 @@ function botUseFavorTokenByGenome(game, player, currentColor) {
   }
 
   if (currentColor === 'G') {
-    // Nucené uschovávání do truhly se vyplatí, jen když je dost pravděpodobné, že soupeři zmaří kartu
-    // (barva, kterou nesbírá) - jinak mu spíš pomůžu.
+    // Soupeř si kartu vybírá sám, takže mu uberu zdroj, ale dám mu bod do panství. Žeton se vyplatí jen
+    // na soupeře s malou zásobou karet (každá karta z ruky je pro něj dražší).
     if (game.heroFlags && game.heroFlags.noBanking) return false;
     const cands = others.filter(p => p.hand.length > 0);
     if (cands.length === 0) return false;
-    return Math.max(...cands.map(spyWasteFraction)) >= 0.5;
+    return Math.min(...cands.map(p => p.hand.length)) <= 4;
   }
 
   if (currentColor === 'S') {
@@ -2641,7 +2742,7 @@ const Art = (function () {
 
   const HOUSE = {
     R: { main: '#9b2a2a', light: '#d0645a', dark: '#5a1212', title: 'VRAŽDA', sub: 'zničí soupeřovu kartu' },
-    G: { main: '#3c6e4c', light: '#78a878', dark: '#1d3f2a', title: 'ŠPIONÁŽ', sub: 'soupeř uschovává naslepo' },
+    G: { main: '#3c6e4c', light: '#78a878', dark: '#1d3f2a', title: 'ŠPIONÁŽ', sub: 'soupeř uschová kartu z ruky' },
     Y: { main: '#c8942a', light: '#ecc866', dark: '#7d5712', title: 'ÚPLATKY', sub: 'podplať kartu v truhle' },
     B: { main: '#2c4d8c', light: '#6c90cc', dark: '#142a58', title: 'PODPORA CÍRKVE', sub: 'lízni neutrální kartu' },
     S: { main: '#7d828a', light: '#b9bdc4', dark: '#43474f', title: 'SVATBA', sub: 'výměna vyložených karet' },
@@ -4807,7 +4908,7 @@ function renderDock(game) {
       const def = heroDef(hh.id);
       const n = h('div', 'my-heroslot');
       n.innerHTML = `<div class="card my-hero" data-hid="${hh.id}"><div class="art">${Art.hero(hh.id)}</div></div>`;
-      n.setAttribute('data-tip', `${def.name}|${def.desc} (přetáhni do okna „Vyložit hrdinu“)`);
+      n.setAttribute('data-tip', `${def.name}|${def.desc} Přetáhni na stůl.`);
       n.firstChild.addEventListener('pointerdown', (ev) => onHandPointerDown(ev, 'hero', hh.id, n.firstChild));
       return n;
     },
@@ -5164,7 +5265,7 @@ const ABILITY_SFX = { R: 'dagger', G: 'whisper', Y: 'bribe', B: 'chime', S: 'bel
       sfx(ABILITY_SFX[color]);
       await showBanner({
         cls: 'ab-' + color, icon: Art.abilityIcon(color), kicker: (fromFavorToken ? 'Žeton přízně · ' : 'Schopnost pole · ') + (actingPlayer.isHuman ? 'Ty' : actingPlayer.name),
-        title: COLOR_ABILITY_NAME[color], sub: color === 'G' ? 'Soupeř musí uschovat do truhly náhodnou kartu z ruky' : COLOR_ABILITY_DESC[color].split('.')[0], ms: Math.max(600, TURN_STEP_MS * 0.85),
+        title: COLOR_ABILITY_NAME[color], sub: color === 'G' ? 'Soupeř musí uschovat do truhly kartu z ruky' : COLOR_ABILITY_DESC[color].split('.')[0], ms: Math.max(600, TURN_STEP_MS * 0.85),
       });
     }
     return _trigger(game, color, actingPlayer, fromFavorToken);
